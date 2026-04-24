@@ -338,10 +338,21 @@
     }
     @keyframes bdFade { from { opacity: 0; } to { opacity: 1; } }
 
+    /* ── Rotating border glow ── */
+    @property --glow-angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes glowSpin {
+      from { --glow-angle: 0deg; }
+      to   { --glow-angle: 360deg; }
+    }
+
     /* ── Modal box ── */
     .modal-box {
       background: #1a1a1a;
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 2px solid rgba(255,255,255,0.06);
       border-radius: 14px;
       max-width: 820px;
       width: 100%;
@@ -349,10 +360,43 @@
       overflow-y: auto;
       position: relative;
       animation: boxUp 0.28s cubic-bezier(.25,.8,.25,1);
+      transition: border-color 0.3s;
     }
     @keyframes boxUp {
       from { transform: translateY(28px); opacity: 0; }
       to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    /* Active glow state — two red lights 180° apart rotating around the border */
+    .modal-box.glow-active {
+      border: 2px solid transparent;
+      background:
+        linear-gradient(#1a1a1a, #1a1a1a) padding-box,
+        conic-gradient(from var(--glow-angle),
+          /* punto 1 */
+          transparent        0deg,
+          transparent       60deg,
+          rgba(229,9,20,0.2) 85deg,
+          #e50914           110deg,
+          #ff6b74           125deg,
+          #e50914           140deg,
+          rgba(229,9,20,0.2) 160deg,
+          transparent       175deg,
+          /* punto 2 — opuesto exacto */
+          transparent       180deg,
+          transparent       240deg,
+          rgba(229,9,20,0.2) 265deg,
+          #e50914           290deg,
+          #ff6b74           305deg,
+          #e50914           320deg,
+          rgba(229,9,20,0.2) 340deg,
+          transparent       355deg,
+          transparent       360deg
+        ) border-box;
+      animation:
+        boxUp    0.28s cubic-bezier(.25,.8,.25,1),
+        glowSpin 6.5s  linear infinite;
+      box-shadow: 0 0 28px rgba(229,9,20,0.18), 0 0 6px rgba(229,9,20,0.12);
     }
 
     .modal-close {
@@ -616,7 +660,9 @@
 <script src="/auth.js"></script>
 <script>
   const API = '/api';
-  const PER_PAGE = 10; // matches server SEARCH_PAGE_SIZE
+  const UI_PER_PAGE  = 30; // movies shown per UI page
+  const API_PER_PAGE = 10; // server always returns 10 per page
+  const API_PAGES_PER_UI = UI_PER_PAGE / API_PER_PAGE; // 3 API calls per UI page
 
   let state = { query: 'the', page: 1, total: 0 };
   let debounceTimer = null;
@@ -664,20 +710,29 @@
       </div>`;
   }
 
-  // ── Load movies ────────────────────────────────────────────────────────────
-  async function loadMovies(query, page) {
+  // ── Load movies (30 per UI page = 3 parallel API requests of 10) ──────────
+  async function loadMovies(query, uiPage) {
     const grid = $id('moviesGrid');
     const pag  = $id('pagination');
 
-    grid.innerHTML = Array(PER_PAGE).fill('<div class="skeleton"></div>').join('');
+    grid.innerHTML = Array(UI_PER_PAGE).fill('<div class="skeleton"></div>').join('');
     pag.innerHTML  = '';
     $id('sectionCount').textContent = '';
 
     try {
-      const res  = await fetch(`${API}/?s=${encodeURIComponent(query)}&page=${page}`);
-      const data = await res.json();
+      // Map UI page → 3 consecutive API pages
+      const firstApi = (uiPage - 1) * API_PAGES_PER_UI + 1;
+      const apiPages = Array.from({ length: API_PAGES_PER_UI }, (_, i) => firstApi + i);
 
-      if (data.Response === 'False') {
+      // Fetch all 3 API pages in parallel
+      const responses = await Promise.all(
+        apiPages.map(p =>
+          fetch(`${API}/?s=${encodeURIComponent(query)}&page=${p}`).then(r => r.json())
+        )
+      );
+
+      const first = responses[0];
+      if (first.Response === 'False') {
         grid.innerHTML = `
           <div class="state-box">
             <svg width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24">
@@ -690,17 +745,22 @@
         return;
       }
 
-      state.total = parseInt(data.totalResults, 10) || 0;
-      const totalPages = Math.ceil(state.total / PER_PAGE);
+      state.total = parseInt(first.totalResults, 10) || 0;
+      const totalUiPages = Math.ceil(state.total / UI_PER_PAGE);
 
-      grid.innerHTML = data.Search.map(buildCard).join('');
+      // Combine results from all API pages (skip empty/failed pages)
+      const movies = responses
+        .filter(d => d.Response === 'True')
+        .flatMap(d => d.Search || []);
+
+      grid.innerHTML = movies.map(buildCard).join('');
 
       $id('sectionTitle').textContent =
         query === 'the' ? 'Películas populares' : `Resultados para "${query}"`;
       $id('sectionCount').textContent =
         `${state.total.toLocaleString('es-ES')} película${state.total !== 1 ? 's' : ''}`;
 
-      renderPagination(page, totalPages);
+      renderPagination(uiPage, totalUiPages);
 
     } catch {
       grid.innerHTML = `
@@ -762,6 +822,7 @@
   async function openDetail(imdbId) {
     const backdrop = $id('modalBackdrop');
     backdrop.classList.add('open');
+    $id('modalBox').classList.add('glow-active');
     document.body.style.overflow = 'hidden';
 
     $id('modalContent').innerHTML = `
@@ -850,6 +911,7 @@
 
   function closeModal() {
     $id('modalBackdrop').classList.remove('open');
+    $id('modalBox').classList.remove('glow-active');
     document.body.style.overflow = '';
   }
 
