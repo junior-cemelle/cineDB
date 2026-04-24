@@ -21,6 +21,15 @@ const PORT = 8089;
 const SEARCH_PAGE_SIZE = 10; // matches OMDB
 
 app.use(cors());
+
+// Exposes only public credentials — safe for browser consumption
+app.get('/config', (_req, res) => {
+  res.json({
+    supabaseUrl:     env.SUPABASE_URL,
+    supabaseAnonKey: env.SUPABASE_ANON_KEY,
+  });
+});
+
 app.use(express.static(join(__dirname, 'public')));
 
 // ── Format helpers (reverse the transformations from the seeder) ───────────────

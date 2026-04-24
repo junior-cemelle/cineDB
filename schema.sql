@@ -35,3 +35,49 @@ CREATE TABLE IF NOT EXISTS ratings (
 CREATE INDEX IF NOT EXISTS idx_movies_imdb_id  ON movies (imdb_id);
 CREATE INDEX IF NOT EXISTS idx_movies_type     ON movies (type);
 CREATE INDEX IF NOT EXISTS idx_ratings_movie   ON ratings (movie_id);
+
+-- ── Profiles (OAuth users) ────────────────────────────────────────────────────
+-- Run AFTER enabling Google / Twitter providers in Supabase Auth dashboard.
+
+CREATE TABLE IF NOT EXISTS profiles (
+  id          UUID        PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username    TEXT,
+  full_name   TEXT,
+  avatar_url  TEXT,
+  provider    TEXT,
+  email       TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Auto-create a profile row when a new OAuth user signs up
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, avatar_url, provider, email)
+  VALUES (
+    NEW.id,
+    NEW.raw_user_meta_data->>'full_name',
+    NEW.raw_user_meta_data->>'avatar_url',
+    NEW.raw_app_meta_data->>'provider',
+    NEW.email
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+-- ── Row Level Security ────────────────────────────────────────────────────────
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Each user can only read and edit their own profile
+CREATE POLICY "select_own_profile" ON profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "update_own_profile" ON profiles
+  FOR UPDATE USING (auth.uid() = id);

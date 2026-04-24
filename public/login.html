@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CineDB — Iniciar sesión</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --red:    #e50914;
+      --text:   #e5e5e5;
+      --muted:  #888;
+    }
+
+    body {
+      background: #000;
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Poster columns background ── */
+    #postersBg {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      gap: 8px;
+      padding: 0 4px;
+    }
+
+    .poster-col {
+      flex: 1;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .col-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .col-inner img {
+      width: 100%;
+      aspect-ratio: 2/3;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+    }
+
+    /* alternating column animations */
+    .scroll-up   { animation: scrollUp   linear infinite; }
+    .scroll-down { animation: scrollDown linear infinite; }
+
+    @keyframes scrollUp {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-50%); }
+    }
+    @keyframes scrollDown {
+      from { transform: translateY(-50%); }
+      to   { transform: translateY(0); }
+    }
+
+    /* ── Dark overlay ── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.55) 100%),
+        radial-gradient(ellipse 60% 70% at 50% 50%, rgba(0,0,0,0.75) 0%, transparent 100%);
+    }
+
+    /* ── Centered form ── */
+    .page {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .card {
+      background: rgba(0, 0, 0, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 2.75rem 2.5rem 2.25rem;
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      animation: cardIn 0.4s cubic-bezier(.25,.8,.25,1) both;
+    }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(20px) scale(0.98); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);    }
+    }
+
+    /* Logo */
+    .logo {
+      text-align: center;
+      font-size: 2.2rem;
+      font-weight: 900;
+      color: var(--red);
+      letter-spacing: -2px;
+    }
+    .logo span { color: var(--text); font-weight: 300; }
+
+    /* Heading */
+    .card-heading { text-align: center; }
+    .card-heading h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .card-heading p {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* OAuth buttons */
+    .oauth-group { display: flex; flex-direction: column; gap: 12px; }
+
+    .btn-oauth {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 13px 20px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: filter 0.18s ease, transform 0.18s ease;
+      position: relative;
+    }
+    .btn-oauth:hover   { filter: brightness(1.12); transform: translateY(-1px); }
+    .btn-oauth:active  { filter: brightness(0.95); transform: translateY(0); }
+    .btn-oauth:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      filter: none;
+    }
+
+    .btn-google {
+      background: #fff;
+      color: #1f1f1f;
+    }
+    .btn-github {
+      background: #24292e;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .btn-oauth svg { flex-shrink: 0; }
+
+    /* Loading spinner inside button */
+    .btn-spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .loading .btn-spinner { display: block; }
+    .loading .btn-icon     { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Divider */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: rgba(255,255,255,0.2);
+      font-size: 0.78rem;
+      letter-spacing: 1px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    /* Footer note */
+    .card-footer {
+      text-align: center;
+      font-size: 0.76rem;
+      color: rgba(255,255,255,0.25);
+      line-height: 1.5;
+    }
+
+    /* Error message */
+    .error-msg {
+      background: rgba(229,9,20,0.15);
+      border: 1px solid rgba(229,9,20,0.4);
+      color: #ff6b74;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 0.84rem;
+      text-align: center;
+      display: none;
+    }
+    .error-msg.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- Poster background (built by JS) -->
+<div id="postersBg"></div>
+<div class="overlay"></div>
+
+<!-- Login form -->
+<div class="page">
+  <div class="card">
+    <div class="logo">Cine<span>DB</span></div>
+
+    <div class="card-heading">
+      <h1>Bienvenido</h1>
+      <p>Inicia sesión para acceder<br>al catálogo de películas</p>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="oauth-group">
+      <button class="btn-oauth btn-google" id="btnGoogle" onclick="signIn('google')">
+        <span class="btn-icon">
+          <!-- Google G -->
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+        </span>
+        <div class="btn-spinner"></div>
+        Continuar con Google
+      </button>
+
+      <div class="divider">o</div>
+
+      <button class="btn-oauth btn-github" id="btnGithub" onclick="signIn('github')">
+        <span class="btn-icon">
+          <!-- GitHub Octocat -->
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+            <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+        </span>
+        <div class="btn-spinner"></div>
+        Continuar con GitHub
+      </button>
+    </div>
+
+    <p class="card-footer">
+      Al continuar aceptas los términos de uso.<br>
+      Este es un proyecto académico.
+    </p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/auth.js"></script>
+<script>
+  // ── Init ───────────────────────────────────────────────────────────────────
+  (async () => {
+    await CINEDB.init();
+    await CINEDB.redirectIfAuthed(); // already logged in → go to catalog
+    buildPosterBg();                 // start loading posters in background
+  })();
+
+  // ── OAuth sign-in ──────────────────────────────────────────────────────────
+  async function signIn(provider) {
+    const btn = document.getElementById(provider === 'google' ? 'btnGoogle' : 'btnGithub');
+    btn.disabled = true;
+    btn.classList.add('loading');
+    hideError();
+
+    try {
+      const { error } = await CINEDB.signInWith(provider);
+      if (error) showError(error.message);
+    } catch (e) {
+      showError('No se pudo conectar. Intenta de nuevo.');
+      btn.disabled = false;
+      btn.classList.remove('loading');
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+  function hideError() {
+    document.getElementById('errorMsg').classList.remove('visible');
+  }
+
+  // ── Poster background ──────────────────────────────────────────────────────
+  async function buildPosterBg() {
+    const terms = ['dark', 'love', 'star', 'man', 'night', 'war'];
+    const results = await Promise.allSettled(
+      terms.map(t => fetch(`/api?s=${t}`).then(r => r.json()))
+    );
+
+    // Collect valid poster URLs, shuffle
+    let posters = results
+      .filter(r => r.status === 'fulfilled' && r.value.Search)
+      .flatMap(r => r.value.Search)
+      .filter(m => m.Poster && m.Poster !== 'N/A')
+      .map(m => m.Poster);
+    posters = shuffle(posters);
+
+    const NUM_COLS  = 5;
+    const DURATIONS = [38, 52, 44, 58, 40]; // different speeds per column
+
+    const bg = document.getElementById('postersBg');
+
+    for (let c = 0; c < NUM_COLS; c++) {
+      // Interleave posters across columns for variety
+      let col = posters.filter((_, i) => i % NUM_COLS === c);
+      if (!col.length) continue;
+
+      // Ensure enough height — pad with repeated items until ≥ 16 images
+      while (col.length < 16) col = [...col, ...col];
+      col = col.slice(0, 20);
+
+      // Duplicate for seamless loop
+      const imgs = [...col, ...col]
+        .map(src => `<img src="${src}" alt="" loading="lazy" onerror="this.style.display='none'">`)
+        .join('');
+
+      const direction = c % 2 === 0 ? 'up' : 'down';
+      const div = document.createElement('div');
+      div.className = 'poster-col';
+      div.innerHTML = `<div class="col-inner scroll-${direction}"
+        style="animation-duration:${DURATIONS[c]}s">${imgs}</div>`;
+      bg.appendChild(div);
+    }
+  }
+
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+</script>
+</body>
+</html>
